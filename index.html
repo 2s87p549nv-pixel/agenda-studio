@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Agenda do Studio</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+:root{
+  --bg:#FFFFFF; --panel:#F0F0F0; --fg:#252525; --muted:#575756; --line:#D6D6D6;
+  --red:#EC1D24; --red-600:#B6211D; --green:#26BC58; --err:#B6211D; --ok:#1A8E46;
+  --free:#FFFFFF; --hatch:#E2E2E2;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#161616; --panel:#222222; --fg:#F2F2F2; --muted:#A8A7A7; --line:#3A3A3A;
+    --red-600:#B6211D; --err:#F5A5A8; --ok:#26BC58; --free:#161616; --hatch:#2A2A2A; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#161616; --panel:#222222; --fg:#F2F2F2; --muted:#A8A7A7; --line:#3A3A3A;
+  --red-600:#B6211D; --err:#F5A5A8; --ok:#26BC58; --free:#161616; --hatch:#2A2A2A; color-scheme: dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:Gellix,"Helvetica Neue",Arial,sans-serif; font-size:15px; line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px)); padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.wrap{max-width:1080px;margin:0 auto;padding-block:24px 48px}
+.top{background:var(--red);color:#fff;padding:24px}
+.topbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+h1{font-size:28px;font-weight:700;margin:0 0 6px;text-wrap:balance}
+.lead{margin:0;font-size:15px;max-width:60ch}
+.headBtn{margin-top:14px;background:#fff;color:var(--red);border:0;padding:10px 14px;font:inherit;font-weight:700;cursor:pointer}
+.headBtn.ghostHead{background:none;color:#fff;border:1px solid #fff}
+.days{display:flex;gap:8px;overflow-x:auto;padding:16px 0 4px}
+.day{flex:0 0 auto;min-width:72px;border:1px solid var(--line);background:var(--bg);color:var(--fg);padding:10px 8px;text-align:center;cursor:pointer;font:inherit}
+.day .dow{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.day .num{display:block;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.day .cnt{display:block;font-size:11px;color:var(--muted)}
+.day.closed .cnt{color:var(--err);font-weight:700}
+.day[aria-pressed="true"]{background:var(--red);border-color:var(--red);color:#fff}
+.day[aria-pressed="true"] .dow,.day[aria-pressed="true"] .cnt{color:#fff}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+.grid2{display:grid;grid-template-columns:1fr;gap:24px;margin-top:20px}
+@media (min-width:800px){.grid2{grid-template-columns:1.3fr 1fr}}
+.panel{background:var(--panel);padding:20px;min-width:0}
+.admin{margin-top:20px}
+.login{max-width:440px;margin:40px auto}
+h2{font-size:18px;font-weight:700;margin:0 0 4px}
+.hint{color:var(--muted);font-size:13px;margin:0 0 14px}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.slot{background:var(--free);border:1px solid var(--line);color:var(--fg);text-align:left;padding:10px 12px;cursor:pointer;font:inherit;min-width:0}
+.slot:hover{border-color:var(--red)}
+.slot .time{display:block;font-weight:700;font-variant-numeric:tabular-nums}
+.slot .who{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slot.busy{background:var(--red-600);border-color:var(--red-600);color:#fff}
+.slot.busy .who{color:#fff}
+.slot.blocked{background:repeating-linear-gradient(45deg,var(--hatch) 0 6px,var(--panel) 6px 12px);color:var(--muted)}
+.detail{margin-top:16px;padding:12px 14px;border-left:4px solid var(--red);background:var(--bg)}
+.detail p{margin:4px 0;overflow-wrap:anywhere}
+.ghost{margin-top:10px;background:none;border:1px solid var(--red);color:var(--red);padding:8px 12px;font:inherit;font-weight:700;cursor:pointer}
+.ghost:disabled{opacity:.5;cursor:not-allowed}
+form label,.admin label{display:block;font-size:13px;font-weight:700;margin:12px 0 4px}
+form label:first-child,.admin label:first-child{margin-top:0}
+input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:0}
+.row{display:grid;grid-template-columns:1fr;gap:0 10px}
+@media (min-width:420px){.row{grid-template-columns:1fr 1fr}}
+.primary{margin-top:16px;width:100%;background:var(--red);color:#fff;border:0;padding:12px;font:inherit;font-weight:700;cursor:pointer}
+.primary:disabled{opacity:.5;cursor:not-allowed}
+.hrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.hrow .info{min-width:0}
+.hrow .info b{font-variant-numeric:tabular-nums}
+.hrow .info span{display:block;font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hrow button{flex:0 0 auto;background:none;border:1px solid var(--red);color:var(--red);padding:8px 12px;font:inherit;font-weight:700;cursor:pointer}
+.hrow button:disabled{opacity:.5;cursor:not-allowed;border-color:var(--line);color:var(--muted)}
+.msg{margin-top:12px;font-size:14px;min-height:1.2em;overflow-wrap:anywhere}
+.msg.err{color:var(--err)}
+.msg.ok{color:var(--ok)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Agenda do Studio</h1>
+    <p class="lead">Reserve horário para produção de conteúdo. Blocos de 1 hora, das 08h às 20h. Toque em um horário livre para começar uma reserva.</p>
+    <div class="topbar">
+      <button class="headBtn" id="viewToggle" type="button" hidden>Painel do studio</button>
+      <button class="headBtn ghostHead" id="logout" type="button" hidden>Sair</button>
+    </div>
+  </header>
+
+  <!-- Tela de login: link por e-mail -->
+  <section class="panel login" id="loginView" hidden>
+    <h2>Entrar</h2>
+    <p class="hint">Digite seu e-mail. Enviaremos um link para entrar, sem senha.</p>
+    <form id="loginForm" novalidate>
+      <label for="email">E-mail</label>
+      <input id="email" type="email" autocomplete="email" required>
+      <button class="primary" id="sendLink" type="submit">Enviar link de acesso</button>
+      <div class="msg" id="loginMsg" role="status" aria-live="polite"></div>
+    </form>
+  </section>
+
+  <div id="app" hidden>
+    <div class="days" id="days" role="group" aria-label="Escolha o dia"></div>
+
+    <div class="grid2" id="bookView">
+      <section class="panel" aria-labelledby="dayTitle">
+        <h2 id="dayTitle"></h2>
+        <p class="hint" id="slotHint">Horários ocupados mostram a equipe que reservou. Toque neles para ver os detalhes.</p>
+        <div class="slots" id="slots"></div>
+        <div id="detail"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="formTitle">
+        <h2 id="formTitle">Nova reserva</h2>
+        <p class="hint">Reservas valem para o dia selecionado.</p>
+        <form id="form" novalidate>
+          <label for="start">Início</label>
+          <select id="start"></select>
+          <div class="row">
+            <div>
+              <label for="dur">Duração</label>
+              <select id="dur">
+                <option value="1">1 hora</option>
+                <option value="2">2 horas</option>
+                <option value="3">3 horas</option>
+                <option value="4">4 horas</option>
+              </select>
+            </div>
+            <div>
+              <label for="who">Quem reserva</label>
+              <input id="who" maxlength="60" autocomplete="off">
+            </div>
+          </div>
+          <label for="team">Equipe</label>
+          <input id="team" maxlength="60" autocomplete="off" placeholder="Ex.: Vendas Campo Limpo">
+          <label for="purpose">Objetivo do conteúdo</label>
+          <textarea id="purpose" rows="3" maxlength="200" placeholder="Ex.: gravar 3 vídeos de apresentação do apartamento"></textarea>
+          <button class="primary" id="submit" type="submit">Reservar horário</button>
+          <div class="msg" id="msg" role="status" aria-live="polite"></div>
+        </form>
+      </section>
+    </div>
+
+    <section class="panel admin" id="adminView" aria-labelledby="adminTitle" hidden>
+      <h2 id="adminTitle"></h2>
+      <p class="hint">Bloqueie o dia inteiro ou horários específicos. Bloqueios impedem novas reservas. Reservas que já existem continuam valendo.</p>
+      <label for="reason">Motivo (a equipe vê no horário bloqueado)</label>
+      <input id="reason" maxlength="80" autocomplete="off" placeholder="Ex.: manutenção do equipamento">
+      <button class="primary" id="dayToggle" type="button"></button>
+      <div id="hourRows"></div>
+      <div class="msg" id="adminMsg" role="status" aria-live="polite"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+(async () => {
+  // Chave publicável: segura para o navegador, porque as regras de acesso ficam no banco.
+  const SUPABASE_URL = 'https://xuattbqijnjvqsbzcjgo.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_xaSV9HXmS4r1MOmP2mT_7w_5kRkT2lj';
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  const HOURS = [];
+  for (let h = 8; h < 20; h++) HOURS.push(h);
+  const pad = n => String(n).padStart(2, '0');
+  const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const key = (date, h) => `${date}_${pad(h)}`;
+  const DOW = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+  const DOW_SHORT = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+  const MES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  const make = (tag, props = {}) => Object.assign(document.createElement(tag), props);
+  const el = id => document.getElementById(id);
+  const $days = el('days'), $slots = el('slots'), $detail = el('detail'), $msg = el('msg'), $submit = el('submit');
+  const $adminMsg = el('adminMsg'), $viewToggle = el('viewToggle'), $dayToggle = el('dayToggle');
+  const $loginMsg = el('loginMsg');
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = Array.from({ length: 14 }, (_, i) => { const d = new Date(today); d.setDate(today.getDate() + i); return d; });
+  let selected = ymd(days[0]);
+  let bookings = {};   // id -> linha da tabela bookings
+  let blocks = {};     // id -> linha da tabela blocks ("AAAA-MM-DD_all" = dia fechado)
+  let picked = null;
+  let view = 'book';
+  let isAdmin = false;
+  let timer = null;
+
+  const dayTitle = d => `${DOW[d.getDay()][0].toUpperCase()}${DOW[d.getDay()].slice(1)}, ${d.getDate()} de ${MES[d.getMonth()]}`;
+  const dayOf = k => days.find(x => ymd(x) === k);
+  const dayBlocked = k => !!blocks[`${k}_all`];
+  const hourBlocked = (k, h) => !!blocks[key(k, h)];
+  const reasonFor = (k, h) => { const b = blocks[`${k}_all`] || blocks[key(k, h)]; return (b && b.reason) || ''; };
+  const isFree = (k, h) => !bookings[key(k, h)] && !dayBlocked(k) && !hourBlocked(k, h);
+
+  // Mensagens de erro em português, sem códigos técnicos.
+  const explain = e => {
+    const code = e && e.code;
+    if (code === '42501') return 'Sem permissão para esta ação.';
+    if (code === 'PGRST301' || code === 'PGRST303') return 'Sua sessão expirou. Entre de novo.';
+    return 'Não foi possível concluir agora. Tente de novo em instantes.';
+  };
+  const showMsg = (text, kind = '') => { $msg.textContent = text; $msg.className = 'msg ' + kind; };
+  const showAdminMsg = (text, kind = '') => { $adminMsg.textContent = text; $adminMsg.className = 'msg ' + kind; };
+
+  function renderDays() {
+    $days.replaceChildren(...days.map(d => {
+      const k = ymd(d);
+      const closed = dayBlocked(k);
+      const free = HOURS.filter(h => isFree(k, h)).length;
+      const b = make('button', { className: 'day' + (closed ? ' closed' : ''), type: 'button' });
+      b.setAttribute('aria-pressed', String(k === selected));
+      b.append(
+        make('span', { className: 'dow', textContent: DOW_SHORT[d.getDay()] }),
+        make('span', { className: 'num', textContent: String(d.getDate()) }),
+        make('span', { className: 'cnt', textContent: closed ? 'Fechado' : `${free} livres` })
+      );
+      b.onclick = () => { selected = k; picked = null; renderAll(); };
+      return b;
+    }));
+  }
+
+  function renderSlots() {
+    const closed = dayBlocked(selected);
+    el('dayTitle').textContent = dayTitle(dayOf(selected));
+    el('slotHint').textContent = closed
+      ? 'Dia fechado para reservas. Escolha outro dia.'
+      : 'Horários ocupados mostram a equipe que reservou. Horários bloqueados não podem ser reservados.';
+    $slots.replaceChildren(...HOURS.map(h => {
+      const b = bookings[key(selected, h)];
+      const blocked = !b && (closed || hourBlocked(selected, h));
+      const cls = b ? 'busy' : blocked ? 'blocked' : 'free';
+      const btn = make('button', { type: 'button', className: 'slot ' + cls });
+      const who = b ? (b.team || b.who || 'Reservado') : blocked ? 'Bloqueado' : 'Livre';
+      btn.append(
+        make('span', { className: 'time', textContent: `${pad(h)}:00` }),
+        make('span', { className: 'who', textContent: who })
+      );
+      btn.onclick = () => {
+        if (b || blocked) { picked = h; } else { el('start').value = String(h); picked = null; }
+        renderAll();
+      };
+      return btn;
+    }));
+  }
+
+  function renderDetail() {
+    $detail.replaceChildren();
+    if (picked == null) return;
+    const b = bookings[key(selected, picked)];
+    const box = make('div', { className: 'detail' });
+    if (!b) {
+      if (!dayBlocked(selected) && !hourBlocked(selected, picked)) return;
+      const reason = reasonFor(selected, picked);
+      box.append(
+        make('p', { textContent: `${pad(picked)}:00 às ${pad(picked + 1)}:00 indisponível` }),
+        make('p', { textContent: reason ? `Motivo: ${reason}` : 'Sem motivo informado.' })
+      );
+      $detail.append(box);
+      return;
+    }
+    box.append(
+      make('p', { textContent: `${pad(picked)}:00 às ${pad(picked + 1)}:00` }),
+      make('p', { textContent: `Reservado por: ${b.who || '-'}` }),
+      make('p', { textContent: `Equipe: ${b.team || '-'}` }),
+      make('p', { textContent: `Objetivo: ${b.purpose || '-'}` })
+    );
+    if (isAdmin) {
+      let armed = false;
+      const cancel = make('button', { className: 'ghost', type: 'button', textContent: 'Cancelar reserva' });
+      cancel.onclick = async () => {
+        if (!armed) { armed = true; cancel.textContent = 'Toque de novo para confirmar'; return; }
+        cancel.disabled = true;
+        const { error } = await sb.from('bookings').delete().eq('id', b.id);
+        if (error) { showMsg(explain(error), 'err'); cancel.disabled = false; return; }
+        picked = null;
+        showMsg('Reserva cancelada.', 'ok');
+        await load();
+      };
+      box.append(cancel);
+    }
+    $detail.append(box);
+  }
+
+  function renderAdmin() {
+    if (view !== 'admin') return;
+    const closed = dayBlocked(selected);
+    el('adminTitle').textContent = `Painel: ${dayTitle(dayOf(selected))}`;
+    $dayToggle.textContent = closed ? 'Liberar dia inteiro' : 'Fechar dia inteiro';
+    el('hourRows').replaceChildren(...HOURS.map(h => {
+      const b = bookings[key(selected, h)];
+      const blocked = hourBlocked(selected, h);
+      const row = make('div', { className: 'hrow' });
+      const info = make('div', { className: 'info' });
+      let status = 'Livre';
+      if (b) status = `Reservado: ${b.team || b.who || '-'}`;
+      else if (closed) status = 'Dia fechado';
+      else if (blocked) status = `Bloqueado${reasonFor(selected, h) ? ': ' + reasonFor(selected, h) : ''}`;
+      info.append(make('b', { textContent: `${pad(h)}:00` }), make('span', { textContent: status }));
+      const btn = make('button', {
+        type: 'button',
+        textContent: b ? 'Reservado' : blocked ? 'Liberar' : 'Bloquear',
+        disabled: !!b
+      });
+      btn.onclick = () => toggleHour(h, btn);
+      row.append(info, btn);
+      return row;
+    }));
+  }
+
+  function renderAll() { renderDays(); renderSlots(); renderDetail(); renderAdmin(); }
+
+  function applyView() {
+    el('bookView').hidden = view !== 'book';
+    el('adminView').hidden = view !== 'admin';
+    $viewToggle.textContent = view === 'book' ? 'Painel do studio' : 'Voltar à agenda';
+    showAdminMsg('');
+    renderAll();
+  }
+
+  // Carrega reservas, bloqueios e o status de dono.
+  async function load() {
+    const [b, k, a] = await Promise.all([
+      sb.from('bookings').select('*'),
+      sb.from('blocks').select('*'),
+      sb.rpc('is_admin')
+    ]);
+    if (b.error || k.error) { showMsg(explain(b.error || k.error), 'err'); return; }
+    bookings = Object.fromEntries((b.data || []).map(r => [r.id, r]));
+    blocks = Object.fromEntries((k.data || []).map(r => [r.id, r]));
+    isAdmin = a.data === true;
+    $viewToggle.hidden = !isAdmin;
+    if (!isAdmin && view === 'admin') view = 'book';
+    applyView();
+    if (!$msg.classList.contains('err')) showMsg('');
+  }
+
+  async function toggleDay() {
+    const k = selected;
+    const reason = el('reason').value.trim();
+    const count = HOURS.filter(h => bookings[key(k, h)]).length;
+    $dayToggle.disabled = true;
+    const { error } = dayBlocked(k)
+      ? await sb.from('blocks').delete().eq('id', `${k}_all`)
+      : await sb.from('blocks').upsert({ id: `${k}_all`, date: k, hour: null, reason });
+    $dayToggle.disabled = false;
+    if (error) { showAdminMsg(explain(error), 'err'); return; }
+    showAdminMsg(dayBlocked(k) ? 'Dia liberado para reservas.' : 'Dia fechado.' + (count ? ` Há ${count} reserva(s) neste dia que continuam valendo.` : ''), 'ok');
+    await load();
+  }
+
+  async function toggleHour(h, btn) {
+    const k = selected;
+    const reason = el('reason').value.trim();
+    btn.disabled = true;
+    const id = key(k, h);
+    const { error } = hourBlocked(k, h)
+      ? await sb.from('blocks').delete().eq('id', id)
+      : await sb.from('blocks').upsert({ id, date: k, hour: h, reason });
+    btn.disabled = false;
+    if (error) { showAdminMsg(explain(error), 'err'); return; }
+    showAdminMsg(`${pad(h)}:00 ${hourBlocked(k, h) ? 'liberado' : 'bloqueado'}.`, 'ok');
+    await load();
+  }
+
+  el('start').replaceChildren(...HOURS.map(h => make('option', { value: String(h), textContent: `${pad(h)}:00` })));
+
+  el('form').onsubmit = async ev => {
+    ev.preventDefault();
+    const start = Number(el('start').value);
+    const dur = Number(el('dur').value);
+    const who = el('who').value.trim();
+    const team = el('team').value.trim();
+    const purpose = el('purpose').value.trim();
+
+    if (dayBlocked(selected)) { showMsg('Este dia está fechado para reservas. Escolha outro dia.', 'err'); return; }
+    if (!who || !purpose) { showMsg('Preencha quem reserva e o objetivo do conteúdo.', 'err'); return; }
+    if (start + dur > 20) { showMsg('A reserva termina depois das 20h. Escolha um início mais cedo ou menos horas.', 'err'); return; }
+    for (let h = start; h < start + dur; h++) {
+      if (hourBlocked(selected, h)) { showMsg(`Às ${pad(h)}:00 o horário está bloqueado. Escolha outro horário.`, 'err'); return; }
+      if (bookings[key(selected, h)]) { showMsg(`Às ${pad(h)}:00 já há reserva. Escolha outro horário.`, 'err'); return; }
+    }
+
+    // Uma única inserção: ou grava todas as horas, ou nenhuma (sem reserva pela metade).
+    const rows = [];
+    for (let h = start; h < start + dur; h++) {
+      rows.push({ id: key(selected, h), date: selected, hour: h, who, team, purpose });
+    }
+    $submit.disabled = true;
+    showMsg('Reservando...');
+    const { error } = await sb.from('bookings').insert(rows);
+    $submit.disabled = false;
+    if (error) {
+      // 23505 = já existe reserva nesse horário (chave primária).
+      if (error.code === '23505') showMsg('Esse horário acabou de ser reservado por outra pessoa. Escolha outro horário.', 'err');
+      else showMsg(explain(error), 'err');
+      await load();
+      return;
+    }
+    el('who').value = ''; el('team').value = ''; el('purpose').value = '';
+    showMsg(`Reserva confirmada: ${pad(start)}:00 a ${pad(start + dur)}:00.`, 'ok');
+    await load();
+  };
+
+  $viewToggle.onclick = () => { view = view === 'book' ? 'admin' : 'book'; applyView(); };
+  $dayToggle.onclick = toggleDay;
+  el('reason').value = '';
+
+  el('loginForm').onsubmit = async ev => {
+    ev.preventDefault();
+    const email = el('email').value.trim();
+    if (!email) return;
+    el('sendLink').disabled = true;
+    const { error } = await sb.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: location.href.split('#')[0] }
+    });
+    el('sendLink').disabled = false;
+    $loginMsg.className = 'msg ' + (error ? 'err' : 'ok');
+    $loginMsg.textContent = error
+      ? 'Não foi possível enviar o link. Confira o e-mail e tente de novo.'
+      : 'Enviamos um link para seu e-mail. Abra o link neste navegador.';
+  };
+
+  el('logout').onclick = async () => { await sb.auth.signOut(); };
+
+  function showLogin() {
+    clearInterval(timer);
+    el('loginView').hidden = false;
+    el('app').hidden = true;
+    el('logout').hidden = true;
+    $viewToggle.hidden = true;
+  }
+
+  async function showApp() {
+    el('loginView').hidden = true;
+    el('app').hidden = false;
+    el('logout').hidden = false;
+    renderAll();
+    await load();
+    clearInterval(timer);
+    timer = setInterval(load, 30000); // atualiza a agenda a cada 30 segundos
+  }
+
+  sb.auth.onAuthStateChange((_event, session) => {
+    if (session) showApp(); else showLogin();
+  });
+
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) showApp(); else showLogin();
+})();
+</script>
+</body>
+</html>
