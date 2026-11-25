@@ -97,13 +97,19 @@ input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(
   <!-- Tela de login: link por e-mail -->
   <section class="panel login" id="loginView" hidden>
     <h2>Entrar</h2>
-    <p class="hint">Digite seu e-mail. Enviaremos um link para entrar, sem senha.</p>
+    <p class="hint" id="loginHint">Digite seu e-mail. Enviaremos um código de acesso, sem senha.</p>
     <form id="loginForm" novalidate>
       <label for="email">E-mail</label>
       <input id="email" type="email" autocomplete="email" required>
-      <button class="primary" id="sendLink" type="submit">Enviar link de acesso</button>
-      <div class="msg" id="loginMsg" role="status" aria-live="polite"></div>
+      <button class="primary" id="sendLink" type="submit">Enviar código</button>
     </form>
+    <form id="codeForm" novalidate hidden>
+      <label for="code">Código recebido por e-mail</label>
+      <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10">
+      <button class="primary" id="verifyCode" type="submit">Entrar</button>
+      <button class="ghost" id="changeEmail" type="button">Usar outro e-mail ou pedir novo código</button>
+    </form>
+    <div class="msg" id="loginMsg" role="status" aria-live="polite"></div>
   </section>
 
   <div id="app" hidden>
@@ -165,6 +171,10 @@ input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(
   // Chave publicável: segura para o navegador, porque as regras de acesso ficam no banco.
   const SUPABASE_URL = 'https://xuattbqijnjvqsbzcjgo.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_xaSV9HXmS4r1MOmP2mT_7w_5kRkT2lj';
+  // Lido antes do Supabase tocar na URL: link de e-mail expirado ou já usado
+  // (o Outlook corporativo costuma abrir os links antes da pessoa).
+  const linkError = new URLSearchParams(location.hash.slice(1)).get('error');
+  if (linkError) history.replaceState(null, '', location.pathname + location.search);
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
   const HOURS = [];
@@ -411,21 +421,53 @@ input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(
   $dayToggle.onclick = toggleDay;
   el('reason').value = '';
 
+  const setLoginMsg = (text, kind = '') => { $loginMsg.textContent = text; $loginMsg.className = 'msg ' + kind; };
+  const LOGIN_HINT = 'Digite seu e-mail. Enviaremos um código de acesso, sem senha.';
+
   el('loginForm').onsubmit = async ev => {
     ev.preventDefault();
     const email = el('email').value.trim();
-    if (!email) return;
+    if (!email) { setLoginMsg('Digite seu e-mail.', 'err'); return; }
     el('sendLink').disabled = true;
     const { error } = await sb.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: location.href.split('#')[0] }
     });
     el('sendLink').disabled = false;
-    $loginMsg.className = 'msg ' + (error ? 'err' : 'ok');
-    if (error) console.error('Erro no envio do link:', error);
-    $loginMsg.textContent = error
-      ? 'Não foi possível enviar o link: ' + error.message
-      : 'Enviamos um link para seu e-mail. Abra o link neste navegador.';
+    if (error) {
+      console.error('Erro no envio do código:', error);
+      setLoginMsg('Não foi possível enviar o código: ' + error.message, 'err');
+      return;
+    }
+    el('loginForm').hidden = true;
+    el('codeForm').hidden = false;
+    el('loginHint').textContent = `Enviamos um código para ${email}. Digite o código abaixo.`;
+    setLoginMsg('');
+    el('code').focus();
+  };
+
+  el('codeForm').onsubmit = async ev => {
+    ev.preventDefault();
+    const email = el('email').value.trim();
+    const token = el('code').value.replace(/\D/g, '');
+    if (!token) { setLoginMsg('Digite o código que chegou por e-mail.', 'err'); return; }
+    el('verifyCode').disabled = true;
+    const { error } = await sb.auth.verifyOtp({ email, token, type: 'email' });
+    el('verifyCode').disabled = false;
+    if (error) {
+      console.error('Erro na verificação do código:', error);
+      setLoginMsg('Código inválido ou expirado. Peça um novo código e use o mais recente.', 'err');
+      return;
+    }
+    // A sessão nova dispara onAuthStateChange, que abre a agenda.
+  };
+
+  el('changeEmail').onclick = () => {
+    el('codeForm').hidden = true;
+    el('loginForm').hidden = false;
+    el('code').value = '';
+    el('loginHint').textContent = LOGIN_HINT;
+    setLoginMsg('');
   };
 
   el('logout').onclick = async () => { await sb.auth.signOut(); };
@@ -454,6 +496,9 @@ input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(
 
   const { data: { session } } = await sb.auth.getSession();
   if (session) showApp(); else showLogin();
+  if (!session && linkError) {
+    setLoginMsg('O link do e-mail expirou ou já foi usado. Peça um código novo e digite-o aqui.', 'err');
+  }
 })();
 </script>
 </body>
