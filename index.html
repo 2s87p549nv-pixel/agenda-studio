@@ -90,29 +90,27 @@ input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(
     <p class="lead">Reserve horário para produção de conteúdo. Blocos de 1 hora, das 08h às 20h. Toque em um horário livre para começar uma reserva.</p>
     <div class="topbar">
       <button class="headBtn" id="viewToggle" type="button" hidden>Painel do studio</button>
+      <button class="headBtn ghostHead" id="adminLogin" type="button">Área do administrador</button>
       <button class="headBtn ghostHead" id="logout" type="button" hidden>Sair</button>
     </div>
   </header>
 
-  <!-- Tela de login: link por e-mail -->
+  <!-- Entrada só para quem gerencia o studio. Para reservar não precisa entrar. -->
   <section class="panel login" id="loginView" hidden>
-    <h2>Entrar</h2>
-    <p class="hint" id="loginHint">Digite seu e-mail. Enviaremos um código de acesso, sem senha.</p>
+    <h2>Área do administrador</h2>
+    <p class="hint">Só para quem gerencia o studio. Para reservar, não precisa entrar.</p>
     <form id="loginForm" novalidate>
       <label for="email">E-mail</label>
-      <input id="email" type="email" autocomplete="email" required>
-      <button class="primary" id="sendLink" type="submit">Enviar código</button>
-    </form>
-    <form id="codeForm" novalidate hidden>
-      <label for="code">Código recebido por e-mail</label>
-      <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10">
-      <button class="primary" id="verifyCode" type="submit">Entrar</button>
-      <button class="ghost" id="changeEmail" type="button">Usar outro e-mail ou pedir novo código</button>
+      <input id="email" type="email" autocomplete="username" required>
+      <label for="password">Senha</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+      <button class="primary" id="signIn" type="submit">Entrar</button>
+      <button class="ghost" id="cancelLogin" type="button">Voltar à agenda</button>
     </form>
     <div class="msg" id="loginMsg" role="status" aria-live="polite"></div>
   </section>
 
-  <div id="app" hidden>
+  <div id="app">
     <div class="days" id="days" role="group" aria-label="Escolha o dia"></div>
 
     <div class="grid2" id="bookView">
@@ -141,7 +139,7 @@ input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(
             </div>
             <div>
               <label for="who">Quem reserva</label>
-              <input id="who" maxlength="60" autocomplete="off">
+              <input id="who" maxlength="60" autocomplete="name">
             </div>
           </div>
           <label for="team">Equipe</label>
@@ -149,7 +147,7 @@ input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(
           <label for="purpose">Objetivo do conteúdo</label>
           <textarea id="purpose" rows="3" maxlength="200" placeholder="Ex.: gravar 3 vídeos de apresentação do apartamento"></textarea>
           <button class="primary" id="submit" type="submit">Reservar horário</button>
-          <div class="msg" id="msg" role="status" aria-live="polite"></div>
+          <div class="msg" id="msg" role="status" aria-live="polite">Carregando agenda...</div>
         </form>
       </section>
     </div>
@@ -167,14 +165,10 @@ input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(
 </div>
 
 <script>
-(async () => {
-  // Chave publicável: segura para o navegador, porque as regras de acesso ficam no banco.
+(() => {
+  // Chave publicável: segura no navegador, porque as regras de acesso ficam no banco.
   const SUPABASE_URL = 'https://xuattbqijnjvqsbzcjgo.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_xaSV9HXmS4r1MOmP2mT_7w_5kRkT2lj';
-  // Lido antes do Supabase tocar na URL: link de e-mail expirado ou já usado
-  // (o Outlook corporativo costuma abrir os links antes da pessoa).
-  const linkError = new URLSearchParams(location.hash.slice(1)).get('error');
-  if (linkError) history.replaceState(null, '', location.pathname + location.search);
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
   const HOURS = [];
@@ -191,15 +185,15 @@ input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(
   const $adminMsg = el('adminMsg'), $viewToggle = el('viewToggle'), $dayToggle = el('dayToggle');
   const $loginMsg = el('loginMsg');
 
+  // 14 dias a partir de hoje: o banco aceita exatamente este período.
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const days = Array.from({ length: 14 }, (_, i) => { const d = new Date(today); d.setDate(today.getDate() + i); return d; });
   let selected = ymd(days[0]);
-  let bookings = {};   // id -> linha da tabela bookings
-  let blocks = {};     // id -> linha da tabela blocks ("AAAA-MM-DD_all" = dia fechado)
+  let bookings = {};   // id -> linha de bookings
+  let blocks = {};     // id -> linha de blocks ("AAAA-MM-DD_all" = dia fechado)
   let picked = null;
   let view = 'book';
   let isAdmin = false;
-  let timer = null;
 
   const dayTitle = d => `${DOW[d.getDay()][0].toUpperCase()}${DOW[d.getDay()].slice(1)}, ${d.getDate()} de ${MES[d.getMonth()]}`;
   const dayOf = k => days.find(x => ymd(x) === k);
@@ -208,15 +202,15 @@ input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(
   const reasonFor = (k, h) => { const b = blocks[`${k}_all`] || blocks[key(k, h)]; return (b && b.reason) || ''; };
   const isFree = (k, h) => !bookings[key(k, h)] && !dayBlocked(k) && !hourBlocked(k, h);
 
-  // Mensagens de erro em português, sem códigos técnicos.
   const explain = e => {
     const code = e && e.code;
-    if (code === '42501') return 'Sem permissão para esta ação.';
+    if (code === '42501') return 'Ação não permitida. O horário pode estar bloqueado ou fora dos próximos 14 dias.';
     if (code === 'PGRST301' || code === 'PGRST303') return 'Sua sessão expirou. Entre de novo.';
     return 'Não foi possível concluir agora. Tente de novo em instantes.';
   };
   const showMsg = (text, kind = '') => { $msg.textContent = text; $msg.className = 'msg ' + kind; };
   const showAdminMsg = (text, kind = '') => { $adminMsg.textContent = text; $adminMsg.className = 'msg ' + kind; };
+  const setLoginMsg = (text, kind = '') => { $loginMsg.textContent = text; $loginMsg.className = 'msg ' + kind; };
 
   function renderDays() {
     $days.replaceChildren(...days.map(d => {
@@ -333,48 +327,54 @@ input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(
     renderAll();
   }
 
-  // Carrega reservas, bloqueios e o status de dono.
+  // Carrega reservas, bloqueios e se quem está vendo é o dono.
   async function load() {
     const [b, k, a] = await Promise.all([
       sb.from('bookings').select('*'),
       sb.from('blocks').select('*'),
       sb.rpc('is_admin')
     ]);
-    if (b.error || k.error) { showMsg(explain(b.error || k.error), 'err'); return; }
+    if (b.error || k.error) {
+      console.error('Erro ao carregar:', b.error || k.error);
+      showMsg('Não foi possível carregar a agenda. Recarregue a página.', 'err');
+      return;
+    }
     bookings = Object.fromEntries((b.data || []).map(r => [r.id, r]));
     blocks = Object.fromEntries((k.data || []).map(r => [r.id, r]));
     isAdmin = a.data === true;
     $viewToggle.hidden = !isAdmin;
     if (!isAdmin && view === 'admin') view = 'book';
     applyView();
-    if (!$msg.classList.contains('err')) showMsg('');
+    if ($msg.textContent === 'Carregando agenda...') showMsg('');
   }
 
   async function toggleDay() {
     const k = selected;
     const reason = el('reason').value.trim();
     const count = HOURS.filter(h => bookings[key(k, h)]).length;
+    const wasClosed = dayBlocked(k);
     $dayToggle.disabled = true;
-    const { error } = dayBlocked(k)
+    const { error } = wasClosed
       ? await sb.from('blocks').delete().eq('id', `${k}_all`)
       : await sb.from('blocks').upsert({ id: `${k}_all`, date: k, hour: null, reason });
     $dayToggle.disabled = false;
     if (error) { showAdminMsg(explain(error), 'err'); return; }
-    showAdminMsg(dayBlocked(k) ? 'Dia liberado para reservas.' : 'Dia fechado.' + (count ? ` Há ${count} reserva(s) neste dia que continuam valendo.` : ''), 'ok');
+    showAdminMsg(wasClosed ? 'Dia liberado para reservas.' : 'Dia fechado.' + (count ? ` Há ${count} reserva(s) neste dia que continuam valendo.` : ''), 'ok');
     await load();
   }
 
   async function toggleHour(h, btn) {
     const k = selected;
     const reason = el('reason').value.trim();
-    btn.disabled = true;
     const id = key(k, h);
-    const { error } = hourBlocked(k, h)
+    const wasBlocked = hourBlocked(k, h);
+    btn.disabled = true;
+    const { error } = wasBlocked
       ? await sb.from('blocks').delete().eq('id', id)
       : await sb.from('blocks').upsert({ id, date: k, hour: h, reason });
     btn.disabled = false;
     if (error) { showAdminMsg(explain(error), 'err'); return; }
-    showAdminMsg(`${pad(h)}:00 ${hourBlocked(k, h) ? 'liberado' : 'bloqueado'}.`, 'ok');
+    showAdminMsg(`${pad(h)}:00 ${wasBlocked ? 'liberado' : 'bloqueado'}.`, 'ok');
     await load();
   }
 
@@ -396,7 +396,7 @@ input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(
       if (bookings[key(selected, h)]) { showMsg(`Às ${pad(h)}:00 já há reserva. Escolha outro horário.`, 'err'); return; }
     }
 
-    // Uma única inserção: ou grava todas as horas, ou nenhuma (sem reserva pela metade).
+    // Uma única inserção: grava todas as horas ou nenhuma.
     const rows = [];
     for (let h = start; h < start + dur; h++) {
       rows.push({ id: key(selected, h), date: selected, hour: h, who, team, purpose });
@@ -406,99 +406,55 @@ input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(
     const { error } = await sb.from('bookings').insert(rows);
     $submit.disabled = false;
     if (error) {
-      // 23505 = já existe reserva nesse horário (chave primária).
+      console.error('Erro ao reservar:', error);
+      // 23505 = alguém reservou esse horário antes (chave única).
       if (error.code === '23505') showMsg('Esse horário acabou de ser reservado por outra pessoa. Escolha outro horário.', 'err');
       else showMsg(explain(error), 'err');
       await load();
       return;
     }
-    el('who').value = ''; el('team').value = ''; el('purpose').value = '';
+    el('team').value = ''; el('purpose').value = '';
     showMsg(`Reserva confirmada: ${pad(start)}:00 a ${pad(start + dur)}:00.`, 'ok');
     await load();
   };
 
   $viewToggle.onclick = () => { view = view === 'book' ? 'admin' : 'book'; applyView(); };
   $dayToggle.onclick = toggleDay;
-  el('reason').value = '';
 
-  const setLoginMsg = (text, kind = '') => { $loginMsg.textContent = text; $loginMsg.className = 'msg ' + kind; };
-  const LOGIN_HINT = 'Digite seu e-mail. Enviaremos um código de acesso, sem senha.';
+  // Área do administrador: e-mail e senha criados no painel do Supabase.
+  function openLogin(open) {
+    el('loginView').hidden = !open;
+    el('app').hidden = open;
+    setLoginMsg('');
+    if (open) el('email').focus();
+  }
+  el('adminLogin').onclick = () => openLogin(true);
+  el('cancelLogin').onclick = () => openLogin(false);
 
   el('loginForm').onsubmit = async ev => {
     ev.preventDefault();
     const email = el('email').value.trim();
-    if (!email) { setLoginMsg('Digite seu e-mail.', 'err'); return; }
-    el('sendLink').disabled = true;
-    const { error } = await sb.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: location.href.split('#')[0] }
-    });
-    el('sendLink').disabled = false;
-    if (error) {
-      console.error('Erro no envio do código:', error);
-      setLoginMsg('Não foi possível enviar o código: ' + error.message, 'err');
-      return;
-    }
-    el('loginForm').hidden = true;
-    el('codeForm').hidden = false;
-    el('loginHint').textContent = `Enviamos um código para ${email}. Digite o código abaixo.`;
-    setLoginMsg('');
-    el('code').focus();
-  };
-
-  el('codeForm').onsubmit = async ev => {
-    ev.preventDefault();
-    const email = el('email').value.trim();
-    const token = el('code').value.replace(/\D/g, '');
-    if (!token) { setLoginMsg('Digite o código que chegou por e-mail.', 'err'); return; }
-    el('verifyCode').disabled = true;
-    const { error } = await sb.auth.verifyOtp({ email, token, type: 'email' });
-    el('verifyCode').disabled = false;
-    if (error) {
-      console.error('Erro na verificação do código:', error);
-      setLoginMsg('Código inválido ou expirado. Peça um novo código e use o mais recente.', 'err');
-      return;
-    }
-    // A sessão nova dispara onAuthStateChange, que abre a agenda.
-  };
-
-  el('changeEmail').onclick = () => {
-    el('codeForm').hidden = true;
-    el('loginForm').hidden = false;
-    el('code').value = '';
-    el('loginHint').textContent = LOGIN_HINT;
-    setLoginMsg('');
+    const password = el('password').value;
+    if (!email || !password) { setLoginMsg('Preencha e-mail e senha.', 'err'); return; }
+    el('signIn').disabled = true;
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    el('signIn').disabled = false;
+    el('password').value = '';
+    if (error) { setLoginMsg('E-mail ou senha incorretos.', 'err'); return; }
+    openLogin(false);
   };
 
   el('logout').onclick = async () => { await sb.auth.signOut(); };
 
-  function showLogin() {
-    clearInterval(timer);
-    el('loginView').hidden = false;
-    el('app').hidden = true;
-    el('logout').hidden = true;
-    $viewToggle.hidden = true;
-  }
-
-  async function showApp() {
-    el('loginView').hidden = true;
-    el('app').hidden = false;
-    el('logout').hidden = false;
-    renderAll();
-    await load();
-    clearInterval(timer);
-    timer = setInterval(load, 30000); // atualiza a agenda a cada 30 segundos
-  }
-
+  // Toda mudança de sessão (inclusive a inicial) atualiza botões e dados.
   sb.auth.onAuthStateChange((_event, session) => {
-    if (session) showApp(); else showLogin();
+    el('logout').hidden = !session;
+    el('adminLogin').hidden = !!session;
+    load();
   });
 
-  const { data: { session } } = await sb.auth.getSession();
-  if (session) showApp(); else showLogin();
-  if (!session && linkError) {
-    setLoginMsg('O link do e-mail expirou ou já foi usado. Peça um código novo e digite-o aqui.', 'err');
-  }
+  renderAll();
+  setInterval(load, 30000); // atualiza a agenda a cada 30 segundos
 })();
 </script>
 </body>
