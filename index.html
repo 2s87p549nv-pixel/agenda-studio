@@ -422,8 +422,9 @@ input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(
     });
     el('sendLink').disabled = false;
     $loginMsg.className = 'msg ' + (error ? 'err' : 'ok');
+    if (error) console.error('Erro no envio do link:', error);
     $loginMsg.textContent = error
-      ? 'Não foi possível enviar o link. Confira o e-mail e tente de novo.'
+      ? 'Não foi possível enviar o link: ' + error.message
       : 'Enviamos um link para seu e-mail. Abra o link neste navegador.';
   };
 
